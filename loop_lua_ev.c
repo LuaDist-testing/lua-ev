@@ -25,13 +25,11 @@ static int luaopen_ev_loop(lua_State *L) {
  */
 static int create_loop_mt(lua_State *L) {
 
-    static luaL_reg fns[] = {
+    static luaL_Reg fns[] = {
         { "is_default", loop_is_default },
         { "count",      loop_iteration }, /* old API */
         { "iteration",  loop_iteration },
-#if HAVE_LOOP_DEPTH
         { "depth",      loop_depth },
-#endif /* HAVE_LOOP_DEPTH */
         { "now",        loop_now },
         { "update_now", loop_update_now },
         { "loop",       loop_loop },
@@ -42,7 +40,7 @@ static int create_loop_mt(lua_State *L) {
         { NULL, NULL }
     };
     luaL_newmetatable(L, LOOP_MT);
-    luaL_register(L, NULL, fns);
+    luaL_setfuncs(L, fns, 0);
     lua_pushvalue(L, -1);
     lua_setfield(L, -2, "__index");
 
@@ -59,13 +57,8 @@ static int create_loop_mt(lua_State *L) {
  * [-0, +1, v]
  */
 static struct ev_loop** loop_alloc(lua_State *L) {
-    int              result;
     struct ev_loop** loop = (struct ev_loop**)
         obj_new(L, sizeof(struct ev_loop*), LOOP_MT);
-
-    lua_newtable(L);
-    result = lua_setfenv(L, -2);
-    assert(result == 1 /* setfenv() was successful */);
 
     return loop;
 }
@@ -138,11 +131,11 @@ static int loop_delete(lua_State *L) {
 static void loop_start_watcher(lua_State* L, int loop_i, int watcher_i, int is_daemon) {
     int current_is_daemon = -1;
 
-    loop_i    = abs_index(L, loop_i);
-    watcher_i = abs_index(L, watcher_i);
+    loop_i    = lua_absindex(L, loop_i);
+    watcher_i = lua_absindex(L, watcher_i);
 
     /* Check that watcher isn't already registered: */
-    lua_getfenv(L,     loop_i);
+    lua_getuservalue(L, loop_i);
     lua_pushvalue(L,   watcher_i);
     lua_rawget(L,      -2);
 
@@ -150,6 +143,14 @@ static void loop_start_watcher(lua_State* L, int loop_i, int watcher_i, int is_d
         current_is_daemon = lua_toboolean(L, -1);
     }
     lua_pop(L, 1);
+
+    if ( is_daemon == -1 ) {
+        /* Set is_daemon properly for -1 case. */
+        if ( current_is_daemon == -1 )
+            is_daemon = 0;
+        else
+            is_daemon = current_is_daemon;
+    }
 
     /* Currently not initialized, or daemon status change? */
     if ( -1 == current_is_daemon ||
@@ -173,19 +174,20 @@ static void loop_start_watcher(lua_State* L, int loop_i, int watcher_i, int is_d
 }
 
 /**
- * Must be called aftert stop()ing a watcher, or after a non-repeating
- * timer expires.  This is necessary so that the watcher is not
- * prematurely garbage collected, and if the watcher is "marked as a
- * daemon", then ev_ref() is called in order to "undo" what was done
- * in loop_add_watcher().
+ * Must be called aftert stop()ing a watcher, or after a watcher is
+ * automatically stopped (such as a non-repeating timer expiring).
+ * This is necessary so that the watcher is not prematurely garbage
+ * collected, and if the watcher is "marked as a daemon", then
+ * ev_ref() is called in order to "undo" what was done in
+ * loop_add_watcher().
  *
  * [-0, +0, m]
  */
 static void loop_stop_watcher(lua_State* L, int loop_i, int watcher_i) {
-    loop_i    = abs_index(L, loop_i);
-    watcher_i = abs_index(L, watcher_i);
+    loop_i    = lua_absindex(L, loop_i);
+    watcher_i = lua_absindex(L, watcher_i);
 
-    lua_getfenv(L,     loop_i);
+    lua_getuservalue(L, loop_i);
     lua_pushvalue(L,   watcher_i);
     lua_rawget(L,      -2);
 
@@ -220,7 +222,6 @@ static int loop_iteration(lua_State *L) {
     return 1;
 }
 
-#if HAVE_LOOP_DEPTH
 /**
  * How many times have we iterated though the event loop?
  */
@@ -231,7 +232,6 @@ static int loop_depth(lua_State *L) {
                     0 : ev_loop_depth(loop));
     return 1;
 }
-#endif /* HAVE_LOOP_DEPTH */
 
 /**
  * The current event loop time.
@@ -256,7 +256,11 @@ static int loop_update_now(lua_State *L) {
  * Actually do the event loop.
  */
 static int loop_loop(lua_State *L) {
-    ev_loop(*check_loop_and_init(L, 1), 0);
+    struct ev_loop *loop = *check_loop_and_init(L, 1);
+    void *old_userdata = ev_userdata(loop);
+    ev_set_userdata(loop, L);
+    ev_loop(loop, 0);
+    ev_set_userdata(loop, old_userdata);
     return 0;
 }
 

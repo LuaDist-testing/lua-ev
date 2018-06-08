@@ -9,19 +9,37 @@
 /**
  * Compatibility defines
  */
-#if EV_VERSION_MAJOR > 3 || (EV_VERSION_MAJOR == 3 && EV_VERISON_MINOR >= 7)
-    #define HAVE_LOOP_DEPTH 1
-#else
-    #define HAVE_LOOP_DEPTH 0
+
+#if EV_VERSION_MAJOR < 3 || (EV_VERSION_MAJOR == 3 && EV_VERSION_MINOR < 7)
+#  warning lua-ev requires version 3.7 or newer of libev
+#endif
+
+#if LUA_VERSION_NUM <= 501
+
+/** Backwards compatibility shims: */
+#define lua_absindex(L, i)                              \
+    ((i) > 0 || (i) <= LUA_REGISTRYINDEX ?              \
+     (i) : lua_gettop(L) + (i) + 1)
+
+#define lua_setuservalue(L, i) lua_setfenv((L), (i))
+
+#define lua_getuservalue(L, i) lua_getfenv((L), (i))
+
+/* NOTE: this only works if nups == 0! */
+#define luaL_setfuncs(L, fns, nups) luaL_register((L), NULL, (fns))
+
 #endif
 
 /**
  * Define the names used for the metatables.
  */
-#define LOOP_MT   "ev{loop}"
-#define IO_MT     "ev{io}"
-#define TIMER_MT  "ev{timer}"
-#define SIGNAL_MT "ev{signal}"
+#define LOOP_MT    "ev{loop}"
+#define IO_MT      "ev{io}"
+#define TIMER_MT   "ev{timer}"
+#define SIGNAL_MT  "ev{signal}"
+#define IDLE_MT    "ev{idle}"
+#define CHILD_MT   "ev{child}"
+#define STAT_MT    "ev{stat}"
 
 /**
  * Special token to represent the uninitialized default loop.  This is
@@ -37,8 +55,14 @@
 #define WATCHER_FN 1
 
 /**
+ * The location in the fenv of the shadow table.
+ */
+#define WATCHER_SHADOW 2
+
+/**
  * Various "check" functions simply call luaL_checkudata() and do the
- * appropriate casting.
+ * appropriate casting, with the exception of check_watcher which is
+ * implemented as a C function.
  */
 
 /**
@@ -59,15 +83,14 @@
 #define check_signal(L, narg)                                   \
     ((struct ev_signal*)   luaL_checkudata((L), (narg), SIGNAL_MT))
 
+#define check_idle(L, narg)                                      \
+    ((struct ev_idle*)     luaL_checkudata((L), (narg), IDLE_MT))
 
-/**
- * Copied from the lua source code lauxlib.c.  It simply converts a
- * negative stack index into a positive one so that if the stack later
- * grows or shrinks, the index will not be effected.
- */
-#define abs_index(L, i)                    \
-    ((i) > 0 || (i) <= LUA_REGISTRYINDEX ? \
-     (i) : lua_gettop(L) + (i) + 1)
+#define check_child(L, narg)                                      \
+    ((struct ev_child*)     luaL_checkudata((L), (narg), CHILD_MT))
+
+#define check_stat(L, narg)                                      \
+    ((struct ev_stat*)     luaL_checkudata((L), (narg), STAT_MT))
 
 
 /**
@@ -103,15 +126,23 @@ static int               loop_fork(lua_State *L);
 static void              create_obj_registry(lua_State *L);
 static int               obj_count(lua_State *L);
 static void*             obj_new(lua_State* L, size_t size, const char* tname);
-static int               push_obj(lua_State* L, void* obj);
+static int               obj_newindex(lua_State *L);
+static int               obj_index(lua_State *L);
+
 static int               push_objs(lua_State* L, void** objs);
 
 /**
  * Watcher functions:
  */
-static void*             watcher_new(lua_State* L, size_t size, const char* lua_type, int data_offset);
-static int               watcher_callback(lua_State *L, const char* tname);
-static void              watcher_cb(void* lua_State_L, struct ev_loop *loop, void *watcher, int revents);
+static int                add_watcher_mt(lua_State *L);
+static int                watcher_is_active(lua_State *L);
+static int                watcher_is_pending(lua_State *L);
+static int                watcher_clear_pending(lua_State *L);
+static void*              watcher_new(lua_State* L, size_t size, const char* lua_type);
+static int                watcher_callback(lua_State *L);
+static int                watcher_priority(lua_State *L);
+static void               watcher_cb(struct ev_loop *loop, void *watcher, int revents);
+static struct ev_watcher* check_watcher(lua_State *L, int watcher_i);
 
 /**
  * Timer functions:
@@ -123,10 +154,7 @@ static void              timer_cb(struct ev_loop* loop, ev_timer* timer, int rev
 static int               timer_again(lua_State *L);
 static int               timer_stop(lua_State *L);
 static int               timer_start(lua_State *L);
-static int               timer_is_active(lua_State *L);
-static int               timer_is_pending(lua_State *L);
 static int               timer_clear_pending(lua_State *L);
-static int               timer_callback(lua_State *L);
 
 /**
  * IO functions:
@@ -135,13 +163,9 @@ static int               luaopen_ev_io(lua_State *L);
 static int               create_io_mt(lua_State *L);
 static int               io_new(lua_State* L);
 static void              io_cb(struct ev_loop* loop, ev_io* io, int revents);
-static int               io_again(lua_State *L);
 static int               io_stop(lua_State *L);
 static int               io_start(lua_State *L);
-static int               io_is_active(lua_State *L);
-static int               io_is_pending(lua_State *L);
-static int               io_clear_pending(lua_State *L);
-static int               io_callback(lua_State *L);
+static int               io_getfd(lua_State *L);
 
 /**
  * Signal functions:
@@ -150,10 +174,40 @@ static int               luaopen_ev_signal(lua_State *L);
 static int               create_signal_mt(lua_State *L);
 static int               signal_new(lua_State* L);
 static void              signal_cb(struct ev_loop* loop, ev_signal* sig, int revents);
-static int               signal_again(lua_State *L);
 static int               signal_stop(lua_State *L);
 static int               signal_start(lua_State *L);
-static int               signal_is_active(lua_State *L);
-static int               signal_is_pending(lua_State *L);
-static int               signal_clear_pending(lua_State *L);
-static int               signal_callback(lua_State *L);
+
+/**
+ * Idle functions:
+ */
+static int               luaopen_ev_idle(lua_State *L);
+static int               create_idle_mt(lua_State *L);
+static int               idle_new(lua_State* L);
+static void              idle_cb(struct ev_loop* loop, ev_idle* idle, int revents);
+static int               idle_stop(lua_State *L);
+static int               idle_start(lua_State *L);
+
+/**
+ * Child functions:
+ */
+static int               luaopen_ev_child(lua_State *L);
+static int               create_child_mt(lua_State *L);
+static int               child_new(lua_State* L);
+static void              child_cb(struct ev_loop* loop, ev_child* sig, int revents);
+static int               child_stop(lua_State *L);
+static int               child_start(lua_State *L);
+static int               child_getpid(lua_State *L);
+static int               child_getrpid(lua_State *L);
+static int               child_getstatus(lua_State *L);
+
+/**
+ * Stat functions:
+ */
+static int               luaopen_ev_stat(lua_State *L);
+static int               create_stat_mt(lua_State *L);
+static int               stat_new(lua_State* L);
+static void              stat_cb(struct ev_loop* loop, ev_stat* sig, int revents);
+static int               stat_stop(lua_State *L);
+static int               stat_start(lua_State *L);
+static int               stat_start(lua_State *L);
+static int               stat_getdata(lua_State *L);

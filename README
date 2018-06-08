@@ -60,6 +60,10 @@ WARNING:
   your event loop(s) in the child process.  You can do this
   re-initialization using the loop:fork() function.
 
+NOTE:
+
+  If you are new to event loop programming, take a look at example.lua
+
 -- ev functions --
 
 major, minor = ev.version()
@@ -151,6 +155,81 @@ io = ev.IO.new(on_io, file_descriptor, revents)
 
     See also ev_io_init() C function.
 
+idle = ev.Idle.new(on_idle)
+
+    Create a new io watcher that will call the on_idle function
+    whenever there is nothing else to do.  This means that the loop
+    will never block while an idle watcher is started.
+
+    The returned io is an ev.Idle object.  See below for the methods on
+    this object.
+
+    NOTE: You must explicitly register the idle with an event loop in
+    order for it to take effect.
+
+    The on_idle function will be called with these arguments (return
+    values are ignored):
+
+    on_idle(loop, idle, revents)
+
+        The loop is the event loop for which the idle object is
+        registered, the idle parameter is the ev.Idle object, and
+        revents is ev.IDLE.
+
+    See also ev_idle_init() C function.
+
+child = ev.Child.new(on_child, pid, trace)
+
+    Create a new child watcher that will call the on_child function
+    whenever SIGCHLD for registered pid is delivered.
+
+    When pid is set to 0 the watcher will fire for any pid.
+
+    When trace is false the watcher will be activated when the process
+    terminates. If it's true - it will additionally be activated when
+    the process is stopped or continued.
+
+    The returned child is an ev.Child object.  See below for the methods on
+    this object.
+
+    NOTE: You must explicitly register the idle with an event loop in
+    order for it to take effect.
+
+    The on_child function will be called with these arguments (return
+    values are ignored):
+
+    on_child(loop, child, revents)
+
+        The loop is the event loop for which the idle object is
+        registered, the child parameter is the ev.Child object, and
+        revents is ev.CHILD.
+
+    See also ev_child_init() C function.
+
+stat = ev.Stat.new(on_stat, path [, interval])
+
+    Configures the watcher to wait for status changes of the given "path".
+    The "interval" is a hint on how quickly a change is expected to be
+    detected and may normally be left out to let libev choose a suitable
+    value.
+
+    The returned stat is an ev.Stat object.  See below for the methods on
+    this object.
+
+    NOTE: You must explicitly register the stat with an event loop in
+    order for it to take effect.
+
+    The on_stat function will be called with these arguments (return
+    values are ignored):
+
+    on_stat(loop, stat, revents)
+
+        The loop is the event loop for which the idle object is
+        registered, the stat parameter is the ev.Stat object, and
+        revents is ev.STAT.
+
+    See also ev_stat_init() C function.
+
 ev.READ (constant)
 
     If this bit is set, the io watcher is ready to read.  See also
@@ -171,6 +250,16 @@ ev.SIGNAL (constant)
    If this bit is set, the watcher was triggered by a signal.  See
    also EV_SIGNAL C definition.
 
+ev.CHILD (constant)
+
+   If this bit is set, the watcher was triggered by a child signal.
+   See also EV_CHILD C definition.
+
+ev.STAT (constant)
+
+   If this bit is set, the watcher was triggered by a change in
+   attributes of the file system path. See also EV_STAT C definition.
+
 -- ev.Loop object methods --
 
 loop:fork()
@@ -181,7 +270,8 @@ loop:fork()
 loop:loop()
 
     Run the event loop!  Returns when there are no more watchers
-    registered with the event loop.
+    registered with the event loop.  See special note below about
+    calling ev_loop() C API.
 
     See also ev_loop() C function.
 
@@ -239,6 +329,44 @@ backend_id = loop:backend()
 
     http://pod.tst.eu/http://cvs.schmorp.de/libev/ev.pod#FUNCTIONS_CONTROLLING_THE_EVENT_LOOP
 
+-- object methods common to all watcher types --
+
+bool = watcher:is_active()
+
+    Returns true if the watcher is active (has been start()ed, but not
+    stop()ed).
+
+    See also ev_is_active() C function.
+
+bool = watcher:is_pending()
+
+    Returns true if the watcher is pending (it has outstanding events
+    but its callback has not yet been invoked).
+
+    See also ev_is_pending() C function.
+
+revents = watcher:clear_pending()
+
+    If the watcher is pending, return the revents of the pending
+    event, otherwise returns zero.  If the event was pending, the
+    pending flag is cleared (and therefore this watcher event will not
+    trigger the events callback).
+
+    See also ev_clear_pending() C function.
+
+old_priority = watcher:priority([new_priority])
+
+    Get access to the priority of this watcher, optionally setting a
+    new priority.  The priority should be a small integer between
+    ev.MINPRI and ev.MAXPRI.  The default is 0.
+
+    See also the ev_priority() and ev_set_priority() C functions.
+
+old_callback = watcher:callback([new_callback])
+
+    Get access to the callback function associated with this watcher,
+    optionally setting a new callback function.
+
 -- ev.Timer object methods --
 
 timer:start(loop [, is_daemon])
@@ -265,34 +393,6 @@ timer:again(loop [, seconds])
 
     See also ev_timer_again() C function.
 
-bool = timer:is_active()
-
-    Returns true if the watcher is active (has been start()ed, but not
-    stop()ed).
-
-    See also ev_is_active() C function.
-
-bool = timer:is_pending()
-
-    Returns true if the watcher is pending (it has outstanding events
-    but its callback has not yet been invoked).
-
-    See also ev_is_pending() C function.
-
-revents = timer:clear_pending()
-
-    If the watcher is pending, return the revents of the pending
-    event, otherwise returns zero.  If the event was pending, the
-    pending flag is cleared (and therefore this watcher event will not
-    trigger the events callback).
-
-    See also ev_clear_pending() C function.
-
-old_on_timeout = timer:callback([new_on_timeout])
-
-    Get access to the callback function associated with this timer,
-    optionally setting a new callback function.
-
 -- ev.IO object methods --
 
 io:start(loop [, is_daemon])
@@ -310,33 +410,101 @@ io:stop(loop)
 
     See also ev_io_stop() C function (document as ev_TYPE_stop()).
 
-bool = io:is_active()
+fd = io:getfd()
 
-    Returns true if the watcher is active (has been start()ed, but not
-    stop()ed).
+    Returns the file descriptor associated with the IO object.
 
-    See also ev_is_active() C function.
+-- ev.Idle object methods --
 
-bool = io:is_pending()
+idle:start(loop [, is_daemon])
 
-    Returns true if the watcher is pending (it has outstanding events
-    but its callback has not yet been invoked).
+    Start the idle watcher in the specified event loop.  Optionally
+    make this watcher a "daemon" watcher which means that the event
+    loop will terminate even if this watcher has not triggered.
 
-    See also ev_is_pending() C function.
+    See also ev_idle_start() C function (document as ev_TYPE_start()).
 
-revents = io:clear_pending()
+idle:stop(loop)
 
-    If the watcher is pending, return the revents of the pending
-    event, otherwise returns zero.  If the event was pending, the
-    pending flag is cleared (and therefore this watcher event will not
-    trigger the events callback).
+    Unregister this idle watcher from the specified event loop.
+    Ensures that the watcher is neither active nor pending.
 
-    See also ev_clear_pending() C function.
+    See also ev_io_stop() C function (document as ev_TYPE_stop()).
 
-on_timeout = io:callback()
+-- ev.Child object methods --
 
-    Get access to the callback function associated with this timer,
-    optionally setting a new callback function.
+child:start(loop [, is_daemon])
+
+    Start the child watcher in the specified event loop.  Optionally
+    make this watcher a "daemon" watcher which means that the event
+    loop will terminate even if this watcher has not triggered.
+
+    See also ev_child_start() C function (document as ev_TYPE_start()).
+
+child:stop(loop)
+
+    Unregister this child watcher from the specified event loop.
+    Ensures that the watcher is neither active nor pending.
+
+    See also ev_child_stop() C function (document as ev_TYPE_stop()).
+
+child:getpid()
+
+    Return the process id this watcher watches out for, or 0, meaning
+    any process id.
+
+child:getrpid()
+
+    Return the process id that detected a status change.
+
+child:getstatus()
+
+    Returns the process exit/trace status caused by "rpid" (see your systems
+    "waitpid" and "sys/wait.h" for details).
+
+    It returns the table with the following fields:
+    - exited: true if status was returned for a child process that terminated
+      normally;
+    - stopped: true if status was returned for a child process that is
+      currently stopped;
+    - signaled: true if status was returned for a child process that terminated
+      due to receipt of a signal that was not caught;
+    - exit_status: (only if exited == true) the low-order 8 bits of the status
+      argument that the child process passed to _exit() or exit(), or the value
+      the child process returned from main();
+    - stop_signal: (only if stopped == true) the number of the signal that
+      caused the child process to stop;
+    - term_signal: (only if signaled == true) the number of the signal that
+      caused the termination of the child process.
+
+-- ev.Stat object methods --
+
+stat:start(loop [, is_daemon])
+
+    Start the stat watcher in the specified event loop.  Optionally
+    make this watcher a "daemon" watcher which means that the event
+    loop will terminate even if this watcher has not triggered.
+
+    See also ev_stat_start() C function (document as ev_TYPE_start()).
+
+stat:stop(loop)
+
+    Unregister this stat watcher from the specified event loop.
+    Ensures that the watcher is neither active nor pending.
+
+    See also ev_stat_stop() C function (document as ev_TYPE_stop()).
+
+stat:getdata()
+
+    Returns a table with the following fields:
+    * - path: the file system path that is being watched;
+    * - interval: the specified interval;
+    * - attr: the most-recently detected attributes of the file in a form
+    *   of table with the following fields: dev, ino, mode, nlink, uid, gid,
+    *   rdev, size, atime, mtime, ctime corresponding to struct stat members
+    *   (st_dev, st_ino, etc.);
+    * - prev: the previous attributes of the file with the same fields as
+    *   attr fields.
 
 EXCEPTION HANDLING NOTE:
 
@@ -351,15 +519,28 @@ EXCEPTION HANDLING NOTE:
    actually handles the exception.  If the error handling stack
    unwinds, we will probably just resort to printing to stderr.
 
-IMPROVEMENT NOTE:
+CALLING ev_loop() C API DIRECTLY:
 
-   You can now call ev_loop() directly from the C API (in the past
-   there was assumptions in the callback implementation).
+   If you want to call the ev_loop() C API directly, then you *must*
+   set the loop userdata field to the lua_State in which you want all
+   callbacks to be ran in.  In the past, the lua_State was stored as
+   a thread local which was set when loop:loop() lua function is
+   called, but this made lua-ev dependent upon pthreads and forced
+   ev_loop() to only be called from lua.  Next, I removed the pthreads
+   dependency and stored the lua_State in which the callback was
+   registered.  This doesn't bode well when working with coroutines as
+   it means that loop:loop() may call back into a coroutine that is
+   long gone.
+
+   The current implementation relies on libev 3.7's ability to set a
+   userdata field associated with an event loop, and the loop:loop()
+   implementation simply sets the userdata field for the duration of
+   loop:loop().  This does mean that if you want to call ev_loop()
+   from C then you either need to be sure that no lua watchers are
+   registered with that loop, or you need to set the userdata field to
+   the lua_State* in which the callbacks should be ran.
 
 TODO:
 
-  * Make the pthread library optional (currently we just register the
-    libev ev_default_fork function via pthread_atfork).
+  * Add support for other watcher types (periodic, embed, async, etc).
 
-  * Add support for other watcher types (signals, stat, periodic,
-    child, idle, embed, async, etc).

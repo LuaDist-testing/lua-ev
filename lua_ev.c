@@ -2,7 +2,7 @@
 #include <ev.h>
 #include <lauxlib.h>
 #include <lua.h>
-#include <pthread.h>
+#include <signal.h>
 
 #include "lua_ev.h"
 
@@ -14,6 +14,16 @@
 #include "io_lua_ev.c"
 #include "timer_lua_ev.c"
 #include "signal_lua_ev.c"
+#include "idle_lua_ev.c"
+#include "child_lua_ev.c"
+#include "stat_lua_ev.c"
+
+static const luaL_Reg R[] = {
+    {"version", version},
+    {"object_count", obj_count},
+    {NULL, NULL},
+};
+
 
 /**
  * Entry point into the 'ev' lua library.  Validates that the
@@ -27,7 +37,11 @@ LUALIB_API int luaopen_ev(lua_State *L) {
 
     create_obj_registry(L);
 
-    lua_createtable(L, 0, 10);
+#if LUA_VERSION_NUM > 501
+    luaL_newlib(L, R);
+#else
+    luaL_register(L, "ev", R);
+#endif
 
     luaopen_ev_loop(L);
     lua_setfield(L, -2, "Loop");
@@ -41,23 +55,68 @@ LUALIB_API int luaopen_ev(lua_State *L) {
     luaopen_ev_signal(L);
     lua_setfield(L, -2, "Signal");
 
-    lua_pushcfunction(L, version);
-    lua_setfield(L, -2, "version");
+    luaopen_ev_idle(L);
+    lua_setfield(L, -2, "Idle");
 
-    lua_pushcfunction(L, obj_count);
-    lua_setfield(L, -2, "object_count");
+    luaopen_ev_child(L);
+    lua_setfield(L, -2, "Child");
 
-    lua_pushnumber(L, EV_READ);
-    lua_setfield(L, -2, "READ");
+    luaopen_ev_stat(L);
+    lua_setfield(L, -2, "Stat");
 
-    lua_pushnumber(L, EV_WRITE);
-    lua_setfield(L, -2, "WRITE");
+#define EV_SETCONST(state, prefix, C) \
+    lua_pushnumber(L, prefix ## C); \
+    lua_setfield(L, -2, #C)
 
-    lua_pushnumber(L, EV_TIMEOUT);
-    lua_setfield(L, -2, "TIMEOUT");
+    EV_SETCONST(L, EV_, CHILD);
+    EV_SETCONST(L, EV_, IDLE);
+    EV_SETCONST(L, EV_, MINPRI);
+    EV_SETCONST(L, EV_, MAXPRI);
+    EV_SETCONST(L, EV_, READ);
+    EV_SETCONST(L, EV_, SIGNAL);
+    EV_SETCONST(L, EV_, STAT);
+    EV_SETCONST(L, EV_, TIMEOUT);
+    EV_SETCONST(L, EV_, WRITE);
 
-    lua_pushnumber(L, EV_SIGNAL);
-    lua_setfield(L, -2, "SIGNAL");
+    EV_SETCONST(L, , SIGABRT);
+    EV_SETCONST(L, , SIGALRM);
+    EV_SETCONST(L, , SIGBUS);
+    EV_SETCONST(L, , SIGCHLD);
+    EV_SETCONST(L, , SIGCONT);
+    EV_SETCONST(L, , SIGFPE);
+    EV_SETCONST(L, , SIGHUP);
+    EV_SETCONST(L, , SIGINT);
+    EV_SETCONST(L, , SIGIO);
+    EV_SETCONST(L, , SIGIOT);
+    EV_SETCONST(L, , SIGKILL);
+    EV_SETCONST(L, , SIGPIPE);
+#ifdef SIGPOLL
+    EV_SETCONST(L, , SIGPOLL);
+#endif
+    EV_SETCONST(L, , SIGPROF);
+#ifdef SIGPWR
+    EV_SETCONST(L, , SIGPWR);
+#endif
+    EV_SETCONST(L, , SIGQUIT);
+    EV_SETCONST(L, , SIGSEGV);
+#ifdef SIGSTKFLT
+    EV_SETCONST(L, , SIGSTKFLT);
+#endif
+    EV_SETCONST(L, , SIGSYS);
+    EV_SETCONST(L, , SIGTERM);
+    EV_SETCONST(L, , SIGTRAP);
+    EV_SETCONST(L, , SIGTSTP);
+    EV_SETCONST(L, , SIGTTIN);
+    EV_SETCONST(L, , SIGTTOU);
+    EV_SETCONST(L, , SIGURG);
+    EV_SETCONST(L, , SIGUSR1);
+    EV_SETCONST(L, , SIGUSR2);
+    EV_SETCONST(L, , SIGVTALRM);
+    EV_SETCONST(L, , SIGWINCH);
+    EV_SETCONST(L, , SIGXCPU);
+    EV_SETCONST(L, , SIGXFSZ);
+
+#undef EV_SETCONST
 
     return 1;
 }
@@ -80,7 +139,7 @@ static int version(lua_State *L) {
 static int traceback(lua_State *L) {
     if ( !lua_isstring(L, 1) ) return 1;
 
-    lua_getfield(L, LUA_GLOBALSINDEX, "debug");
+    lua_getglobal(L, "debug");
     if ( !lua_istable(L, -1) ) {
         lua_pop(L, 1);
         return 1;

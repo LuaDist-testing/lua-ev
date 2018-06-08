@@ -22,19 +22,14 @@ static int luaopen_ev_signal(lua_State *L) {
  */
 static int create_signal_mt(lua_State *L) {
 
-    static luaL_reg fns[] = {
+    static luaL_Reg fns[] = {
         { "stop",          signal_stop },
         { "start",         signal_start },
-        { "is_active",     signal_is_active },
-        { "is_pending",    signal_is_pending },
-        { "clear_pending", signal_clear_pending },
-        { "callback",      signal_callback },
         { NULL, NULL }
     };
     luaL_newmetatable(L, SIGNAL_MT);
-    luaL_register(L, NULL, fns);
-    lua_pushvalue(L, -1);
-    lua_setfield(L, -2, "__index");
+    add_watcher_mt(L);
+    luaL_setfuncs(L, fns, 0);
 
     return 1;
 }
@@ -52,11 +47,7 @@ static int signal_new(lua_State* L) {
     int         signum = luaL_checkint(L, 2);
     ev_signal*  sig;
 
-    sig = watcher_new(L,
-                      sizeof(ev_signal),
-                      SIGNAL_MT,
-                      offsetof(ev_signal, data));
-
+    sig = watcher_new(L, sizeof(ev_signal), SIGNAL_MT);
     ev_signal_init(sig, &signal_cb, signum);
     return 1;
 }
@@ -67,7 +58,7 @@ static int signal_new(lua_State* L) {
  * [+0, -0, m]
  */
 static void signal_cb(struct ev_loop* loop, ev_signal* sig, int revents) {
-    watcher_cb(sig->data, loop, sig, revents);
+    watcher_cb(loop, sig, revents);
 }
 
 /**
@@ -105,53 +96,4 @@ static int signal_start(lua_State *L) {
     loop_start_watcher(L, 2, 1, is_daemon);
 
     return 0;
-}
-
-/**
- * Test if the signal is active.
- *
- * Usage:
- *   bool = signal:is_active()
- *
- * [+1, -0, e]
- */
-static int signal_is_active(lua_State *L) {
-    lua_pushboolean(L, ev_is_active(check_signal(L, 1)));
-    return 1;
-}
-
-/**
- * Test if the signal is pending.
- *
- * Usage:
- *   bool = signal:is_pending()
- *
- * [+1, -0, e]
- */
-static int signal_is_pending(lua_State *L) {
-    lua_pushboolean(L, ev_is_pending(check_signal(L, 1)));
-    return 1;
-}
-
-/**
- * If the signal is pending, return the revents and clear the pending
- * status (so the signal callback won't be called).
- *
- * Usage:
- *   revents = signal:clear_pending(loop)
- *
- * [+1, -0, e]
- */
-static int signal_clear_pending(lua_State *L) {
-    lua_pushnumber(L, ev_clear_pending(*check_loop_and_init(L, 2), check_signal(L, 1)));
-    return 1;
-}
-
-/**
- * @see watcher_callback()
- *
- * [+1, -0, e]
- */
-static int signal_callback(lua_State *L) {
-    return watcher_callback(L, SIGNAL_MT);
 }

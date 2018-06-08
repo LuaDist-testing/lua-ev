@@ -22,20 +22,16 @@ static int luaopen_ev_timer(lua_State *L) {
  */
 static int create_timer_mt(lua_State *L) {
 
-    static luaL_reg fns[] = {
+    static luaL_Reg fns[] = {
         { "again",         timer_again },
         { "stop",          timer_stop },
         { "start",         timer_start },
-        { "is_active",     timer_is_active },
-        { "is_pending",    timer_is_pending },
         { "clear_pending", timer_clear_pending },
-        { "callback",      timer_callback },
         { NULL, NULL }
     };
     luaL_newmetatable(L, TIMER_MT);
-    luaL_register(L, NULL, fns);
-    lua_pushvalue(L, -1);
-    lua_setfield(L, -2, "__index");
+    add_watcher_mt(L);
+    luaL_setfuncs(L, fns, 0);
 
     return 1;
 }
@@ -60,10 +56,7 @@ static int timer_new(lua_State* L) {
     if ( repeat < 0.0 )
         luaL_argerror(L, 3, "repeat must be greater than or equal to 0");
 
-    timer = watcher_new(L,
-                        sizeof(ev_timer),
-                        TIMER_MT,
-                        offsetof(ev_timer, data));
+    timer = watcher_new(L, sizeof(ev_timer), TIMER_MT);
     ev_timer_init(timer, &timer_cb, after, repeat);
     return 1;
 }
@@ -74,7 +67,7 @@ static int timer_new(lua_State* L) {
  * [+0, -0, m]
  */
 static void timer_cb(struct ev_loop* loop, ev_timer* timer, int revents) {
-    watcher_cb(timer->data, loop, timer, revents);
+    watcher_cb(loop, timer, revents);
 }
 
 /**
@@ -152,32 +145,6 @@ static int timer_start(lua_State *L) {
 }
 
 /**
- * Test if the timer is active.
- *
- * Usage:
- *   bool = timer:is_active()
- *
- * [+1, -0, e]
- */
-static int timer_is_active(lua_State *L) {
-    lua_pushboolean(L, ev_is_active(check_timer(L, 1)));
-    return 1;
-}
-
-/**
- * Test if the timer is pending.
- *
- * Usage:
- *   bool = timer:is_pending()
- *
- * [+1, -0, e]
- */
-static int timer_is_pending(lua_State *L) {
-    lua_pushboolean(L, ev_is_pending(check_timer(L, 1)));
-    return 1;
-}
-
-/**
  * If the timer is pending, return the revents and clear the pending
  * status (so the timer callback won't be called).
  *
@@ -199,13 +166,4 @@ static int timer_clear_pending(lua_State *L) {
 
     lua_pushnumber(L, revents);
     return 1;
-}
-
-/**
- * @see watcher_callback()
- *
- * [+1, -0, e]
- */
-static int timer_callback(lua_State *L) {
-    return watcher_callback(L, TIMER_MT);
 }
