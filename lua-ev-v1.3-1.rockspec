@@ -1,16 +1,16 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "lua-ev"
-version = "v1.2-1"
+version = "v1.3-1"
 
 -- LuaDist source
 source = {
-  tag = "v1.2-1",
+  tag = "v1.3-1",
   url = "git://github.com/LuaDist-testing/lua-ev.git"
 }
 -- Original source
 -- source = {
---    url = "http://github.com/downloads/brimworks/lua-ev/lua-ev-v1.2.tar.gz"
+--    url = "http://github.com/downloads/brimworks/lua-ev/lua-ev-v1.3.tar.gz"
 -- }
 
 description = {
