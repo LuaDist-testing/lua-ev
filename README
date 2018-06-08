@@ -1,0 +1,362 @@
+**********************************************************************
+* Author  : Brian Maher <maherb at brimworks dot com>
+* Library : lua-ev - Lua 5.1 interface to libev
+*
+* The MIT License
+* 
+* Copyright (c) 2009-1010 Brian Maher
+*
+* Permission is hereby granted, free of charge, to any person obtaining a copy
+* of this software and associated documentation files (the "Software"), to deal
+* in the Software without restriction, including without limitation the rights
+* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+* copies of the Software, and to permit persons to whom the Software is
+* furnished to do so, subject to the following conditions:
+* 
+* The above copyright notice and this permission notice shall be included in
+* all copies or substantial portions of the Software.
+* 
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+* THE SOFTWARE.
+**********************************************************************
+
+To use this library, you need libev, get it here:
+     http://dist.schmorp.de/libev/
+     http://software.schmorp.de/pkg/libev.html
+
+To build this library, you need CMake, get it here:
+    http://www.cmake.org/cmake/resources/software.html
+
+Loading the library:
+
+    If you built the library as a loadable package
+        [local] ev = require 'ev'
+
+    If you compiled the package statically into your application, call
+    the function "luaopen_ev(L)". It will create a table with the ev
+    functions and leave it on the stack.
+
+Choosing a backend:
+
+    Set the LIBEV_FLAGS= environment variable to choose a backend:
+
+    1 - select()
+    2 - poll()
+    4 - epoll()
+    8 - kqueue
+    16 - /dev/poll [not implemented]
+    32 - Solaris port
+
+    Please see the documentation for libev for more details.
+
+WARNING:
+
+  If your program fork()s, then you will need to re-initialize
+  your event loop(s) in the child process.  You can do this
+  re-initialization using the loop:fork() function.
+
+-- ev functions --
+
+major, minor = ev.version()
+
+    returns numeric ev version for the major and minor
+    levels of the version dynamically linked in.
+
+loop = ev.Loop.new()
+
+    Create a new non-default event loop.  See ev.Loop object methods
+    below.
+
+loop = ev.Loop.default
+
+    The "default" event loop.  See ev.Loop object methods below.
+    Note that the default loop is "lazy loaded".
+
+timer = ev.Timer.new(on_timeout, after_seconds [, repeat_seconds])
+
+    Create a new timer that will call the on_timeout function when the
+    timer expires.  The timer initially expires in after_seconds
+    (floating point), then it will expire in repeat_seconds (floating
+    point) over and over again (unless repeat_seconds is zero or is
+    omitted in which case, this timer will only fire once).
+
+    The returned timer is an ev.Timer object.  See below for the
+    methods on this object.
+
+    NOTE: You must explicitly register the timer with an event loop in
+    order for it to take effect.
+
+    The on_timeout function will be called with these arguments
+    (return values are ignored):
+
+    on_timeout(loop, timer, revents)
+
+        The loop is the event loop for which the timer is registered,
+        the timer is the ev.Timer object, and revents is ev.TIMEOUT.
+
+    See also ev_timer_init() C function.
+
+sig = ev.Signal.new(on_signal, signal_number)
+
+    Create a new signal watcher that will call the on_signal function
+    when the specified signal_number is delivered.
+
+    The returned sig is an ev.Signal object.  See below for the methods on
+    this object.
+
+    NOTE: You must explicitly register the sig with an event loop in
+    order for it to take effect.
+
+    The on_signal function will be called with these arguments (return
+    values are ignored):
+
+    on_signal(loop, sig, revents)
+
+        The loop is the event loop for which the io object is
+        registered, the sig parameter is the ev.Signal object, and
+        revents is ev.SIGNAL.
+
+    See also ev_signal_init() C function.
+
+io = ev.IO.new(on_io, file_descriptor, revents)
+
+    Create a new io watcher that will call the on_io function when the
+    specified file_descriptor is available for read and/or write
+    depending on the revents.  The revents parameter must be either
+    ev.READ, ev.WRITE, or the bitwise or of ev.READ and ev.WRITE (use
+    bitlib to do bitwise or).
+
+    The returned io is an ev.IO object.  See below for the methods on
+    this object.
+
+    NOTE: You must explicitly register the io with an event loop in
+    order for it to take effect.
+
+    The on_io function will be called with these arguments (return
+    values are ignored):
+
+    on_io(loop, io, revents)
+
+        The loop is the event loop for which the io object is
+        registered, the io parameter is the ev.IO object, and revents
+        is a bit set consisting of ev.READ and/or ev.WRITE and/or
+        ev.TIMEOUT depending on which event triggered this callback.
+        Of course ev.TIMEOUT won't be in that set since this is the io
+        watcher.
+
+    See also ev_io_init() C function.
+
+ev.READ (constant)
+
+    If this bit is set, the io watcher is ready to read.  See also
+    EV_READ C definition.
+
+ev.WRITE (constant)
+
+    If this bit is set, the io watcher is ready to write.  See also
+    EV_WRITE C definition.
+
+ev.TIMEOUT (constant)
+
+    If this bit is set, the watcher was triggered by a timeout. See
+    also EV_TIMEOUT C definition.
+
+ev.SIGNAL (constant)
+
+   If this bit is set, the watcher was triggered by a signal.  See
+   also EV_SIGNAL C definition.
+
+-- ev.Loop object methods --
+
+loop:fork()
+
+   You *must* call this function in the child process after fork(2)
+   system call and before the next iteration of the event loop.
+
+loop:loop()
+
+    Run the event loop!  Returns when there are no more watchers
+    registered with the event loop.
+
+    See also ev_loop() C function.
+
+bool = loop:is_default()
+
+    Returns true if the referenced loop object is the default event
+    loop.
+
+    See also ev_is_default_loop() C function.
+
+num = loop:iteration()
+
+    Returns the number of loop iterations.  Note that this function
+    used to be called loop:count().
+
+    See also ev_iterations() C function.
+
+num = loop:depth()
+
+    Returns the number of times loop:loop() was entered minus the
+    number of times loop:loop() was exited, in other words, the
+    recursion depth.
+
+    See also ev_depth() C function.
+
+epochs = loop:now()
+
+    Returns the non-integer epoch seconds time at which the current
+    iteration of the event loop woke up.
+
+    See also ev_now() C function.
+
+epochs = loop:update_now()
+
+    Updates the current time returned by loop.now(), and returns that
+    timestamp.
+
+    See also ev_now_update() C function.
+
+loop:unloop()
+
+    Process all outstanding events in the event loop, but do not make
+    another iteration of the event loop.
+
+    See also ev_unloop() C function.
+
+backend_id = loop:backend()
+
+    Returns the identifier of the current backend which is being used
+    by this event loop.  See the libev documentation for what each
+    number means:
+
+    http://pod.tst.eu/http://cvs.schmorp.de/libev/ev.pod#FUNCTIONS_CONTROLLING_THE_EVENT_LOOP
+
+-- ev.Timer object methods --
+
+timer:start(loop [, is_daemon])
+
+    Start the timer in the specified event loop.  Optionally make this
+    watcher a "daemon" watcher which means that the event loop will
+    terminate even if this watcher has not triggered.
+
+    See also ev_timer_start() C function (document as ev_TYPE_start()).
+
+timer:stop(loop)
+
+    Unregister this timer from the specified event loop.  Ensures that
+    the watcher is neither active nor pending.
+
+    See also ev_timer_stop() C function (document as ev_TYPE_stop()).
+
+timer:again(loop [, seconds])
+
+    Reset the timer so that it doesn't trigger again in the specified
+    loop until the specified number of seconds from now have elapsed.
+    If seconds is not specified, uses the repeat_seconds specified
+    when the timer was created.
+
+    See also ev_timer_again() C function.
+
+bool = timer:is_active()
+
+    Returns true if the watcher is active (has been start()ed, but not
+    stop()ed).
+
+    See also ev_is_active() C function.
+
+bool = timer:is_pending()
+
+    Returns true if the watcher is pending (it has outstanding events
+    but its callback has not yet been invoked).
+
+    See also ev_is_pending() C function.
+
+revents = timer:clear_pending()
+
+    If the watcher is pending, return the revents of the pending
+    event, otherwise returns zero.  If the event was pending, the
+    pending flag is cleared (and therefore this watcher event will not
+    trigger the events callback).
+
+    See also ev_clear_pending() C function.
+
+old_on_timeout = timer:callback([new_on_timeout])
+
+    Get access to the callback function associated with this timer,
+    optionally setting a new callback function.
+
+-- ev.IO object methods --
+
+io:start(loop [, is_daemon])
+
+    Start the io in the specified event loop.  Optionally make this
+    watcher a "daemon" watcher which means that the event loop will
+    terminate even if this watcher has not triggered.
+
+    See also ev_io_start() C function (document as ev_TYPE_start()).
+
+io:stop(loop)
+
+    Unregister this io from the specified event loop.  Ensures that
+    the watcher is neither active nor pending.
+
+    See also ev_io_stop() C function (document as ev_TYPE_stop()).
+
+bool = io:is_active()
+
+    Returns true if the watcher is active (has been start()ed, but not
+    stop()ed).
+
+    See also ev_is_active() C function.
+
+bool = io:is_pending()
+
+    Returns true if the watcher is pending (it has outstanding events
+    but its callback has not yet been invoked).
+
+    See also ev_is_pending() C function.
+
+revents = io:clear_pending()
+
+    If the watcher is pending, return the revents of the pending
+    event, otherwise returns zero.  If the event was pending, the
+    pending flag is cleared (and therefore this watcher event will not
+    trigger the events callback).
+
+    See also ev_clear_pending() C function.
+
+on_timeout = io:callback()
+
+    Get access to the callback function associated with this timer,
+    optionally setting a new callback function.
+
+EXCEPTION HANDLING NOTE:
+
+   If there is an exception when calling a watcher callback, the error
+   will be printed to stderr.  In the future, it would be cool if
+   there was a linked list of error handlers, and that if a callback
+   registers another callback, this linked list of error handlers
+   would be inherited so that exception handling can be done more
+   easily.  To do this, we just need to add a method for adding an
+   error handler for the current callback context, and keep calling
+   the error handlers in the linked list until an error handler
+   actually handles the exception.  If the error handling stack
+   unwinds, we will probably just resort to printing to stderr.
+
+IMPROVEMENT NOTE:
+
+   You can now call ev_loop() directly from the C API (in the past
+   there was assumptions in the callback implementation).
+
+TODO:
+
+  * Make the pthread library optional (currently we just register the
+    libev ev_default_fork function via pthread_atfork).
+
+  * Add support for other watcher types (signals, stat, periodic,
+    child, idle, embed, async, etc).
